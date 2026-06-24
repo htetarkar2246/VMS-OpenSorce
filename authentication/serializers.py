@@ -1,87 +1,104 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
+from .models import UserContact
+
 User = get_user_model()
 
 
-class RegisterSerializer(serializers.ModelSerializer):
-    """Serializer for new user registration."""
+class UserContactSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserContact
+        fields = [
+            "id",
+            "contact_type",
+            "value",
+            "is_primary",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at"]
 
-    password = serializers.CharField(
-        write_only=True,
-        min_length=8,
-        help_text="Minimum 8 characters.",
-    )
+
+class RegisterSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True, min_length=8)
+    contacts = UserContactSerializer(many=True, required=False)
 
     class Meta:
         model = User
         fields = [
             "id",
-            "username",
             "email",
             "password",
-            "first_name",
-            "last_name",
-            "telegram_username",
-            "phone",
-            "position",
-            "join_date",
-            "job_description",
-        ]
-        read_only_fields = ["id"]
-        extra_kwargs = {
-            "username": {"help_text": "Unique username for login."},
-            "email": {"help_text": "Unique email address."},
-        }
-
-    def create(self, validated_data):
-        password = validated_data.pop("password")
-        user = User(**validated_data)
-        user.set_password(password)
-        user.save()
-        return user
-
-
-class UserSerializer(serializers.ModelSerializer):
-    """Serializer for reading and updating user profile data."""
-
-    avatar = serializers.ImageField(required=False, allow_null=True)
-
-    class Meta:
-        model = User
-        fields = [
-            "id",
-            "avatar",
-            "username",
-            "email",
-            "first_name",
-            "last_name",
-            "telegram_username",
+            "name",
+            "profile_photo",
             "phone",
             "role",
             "position",
             "join_date",
-            "job_description",
-            "status",
-            "date_joined",
+            "contacts",
         ]
-        read_only_fields = ["id", "role", "status", "date_joined"]
+
+    def create(self, validated_data):
+        contacts_data = validated_data.pop("contacts", [])
+        password = validated_data.pop("password")
+
+        user = User(**validated_data)
+        user.set_password(password)
+        user.save()
+
+        for contact in contacts_data:
+            UserContact.objects.create(user=user, **contact)
+
+        return user
+
+
+class UserSerializer(serializers.ModelSerializer):
+    contacts = UserContactSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = User
+        fields = [
+            "id",
+            "email",
+            "name",
+            "profile_photo",
+            "phone",
+            "role",
+            "position",
+            "join_date",
+            "status",
+            "is_active",
+            "is_staff",
+            "is_superuser",
+            "last_login",
+            "created_at",
+            "updated_at",
+            "contacts",
+        ]
+        read_only_fields = [
+            "id",
+            "role",
+            "status",
+            "is_active",
+            "is_staff",
+            "is_superuser",
+            "last_login",
+            "created_at",
+            "updated_at",
+        ]
 
 
 class ForgotPasswordSerializer(serializers.Serializer):
-    email = serializers.EmailField(help_text="Email address of the account to reset.")
+    email = serializers.EmailField()
 
 
 class VerifyOTPSerializer(serializers.Serializer):
     email = serializers.EmailField()
-    otp = serializers.CharField(max_length=6, help_text="6-digit OTP sent to email.")
+    otp = serializers.CharField(max_length=6)
 
 
 class ResetPasswordSerializer(serializers.Serializer):
     email = serializers.EmailField()
-    otp = serializers.CharField(max_length=6, help_text="6-digit OTP sent to email.")
-    new_password = serializers.CharField(
-        write_only=True,
-        min_length=8,
-        help_text="New password (minimum 8 characters).",
-    )
+    otp = serializers.CharField(max_length=6)
+    new_password = serializers.CharField(write_only=True, min_length=8)
