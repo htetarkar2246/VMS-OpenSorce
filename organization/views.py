@@ -1,9 +1,17 @@
 from rest_framework import status, viewsets
 from rest_framework.response import Response
 
-from .models import Department, Team, TeamMember, Task
+from .models import Department, Team, TeamMember, Task, Achievement, Meeting, MeetingAttendee
 from .permissions import IsManagerOrReadOnly, IsManagerOrSupervisorOrReadOnly, IsManagerSupervisorLeaderOrReadOnly
-from .serializers import DepartmentSerializer, TeamSerializer, TeamMemberSerializer, TaskSerializer
+from .serializers import (
+    DepartmentSerializer,
+    TeamSerializer,
+    TeamMemberSerializer,
+    TaskSerializer,
+    AchievementSerializer,
+    MeetingSerializer,
+    MeetingAttendeeSerializer,
+)
 
 def envelope(success=True, message="", data=None, errors=None):
     return {
@@ -228,3 +236,152 @@ class TaskViewSet(viewsets.ModelViewSet):
         task = self.get_object()
         task.soft_delete()
         return Response(envelope(True, "Task deleted successfully"))
+
+class AchievementViewSet(viewsets.ModelViewSet):
+    serializer_class = AchievementSerializer
+    permission_classes = [IsManagerSupervisorLeaderOrReadOnly]
+
+    def get_queryset(self):
+        return Achievement.objects.filter(deleted_at__isnull=True).select_related(
+            "user",
+            "team",
+            "created_by",
+        )
+
+    def list(self, request, *args, **kwargs):
+        serializer = self.get_serializer(self.get_queryset(), many=True)
+        return Response(envelope(True, "Achievements retrieved successfully", serializer.data))
+
+    def retrieve(self, request, *args, **kwargs):
+        serializer = self.get_serializer(self.get_object())
+        return Response(envelope(True, "Achievement retrieved successfully", serializer.data))
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+
+        if serializer.is_valid():
+            serializer.save(created_by=request.user)
+            return Response(
+                envelope(True, "Achievement created successfully", serializer.data),
+                status=status.HTTP_201_CREATED,
+            )
+
+        return Response(
+            envelope(False, "Validation failed", None, serializer.errors),
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop("partial", False)
+        serializer = self.get_serializer(self.get_object(), data=request.data, partial=partial)
+
+        if serializer.is_valid():
+            serializer.save()
+            return Response(envelope(True, "Achievement updated successfully", serializer.data))
+
+        return Response(
+            envelope(False, "Validation failed", None, serializer.errors),
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    def destroy(self, request, *args, **kwargs):
+        achievement = self.get_object()
+        achievement.soft_delete()
+        return Response(envelope(True, "Achievement deleted successfully"))
+
+
+class MeetingViewSet(viewsets.ModelViewSet):
+    serializer_class = MeetingSerializer
+    permission_classes = [IsManagerSupervisorLeaderOrReadOnly]
+
+    def get_queryset(self):
+        return Meeting.objects.filter(deleted_at__isnull=True).select_related(
+            "department",
+            "team",
+            "created_by",
+        ).prefetch_related("attendees")
+
+    def list(self, request, *args, **kwargs):
+        serializer = self.get_serializer(self.get_queryset(), many=True)
+        return Response(envelope(True, "Meetings retrieved successfully", serializer.data))
+
+    def retrieve(self, request, *args, **kwargs):
+        serializer = self.get_serializer(self.get_object())
+        return Response(envelope(True, "Meeting retrieved successfully", serializer.data))
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+
+        if serializer.is_valid():
+            serializer.save(created_by=request.user)
+            return Response(
+                envelope(True, "Meeting created successfully", serializer.data),
+                status=status.HTTP_201_CREATED,
+            )
+
+        return Response(
+            envelope(False, "Validation failed", None, serializer.errors),
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop("partial", False)
+        serializer = self.get_serializer(self.get_object(), data=request.data, partial=partial)
+
+        if serializer.is_valid():
+            serializer.save()
+            return Response(envelope(True, "Meeting updated successfully", serializer.data))
+
+        return Response(
+            envelope(False, "Validation failed", None, serializer.errors),
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    def destroy(self, request, *args, **kwargs):
+        meeting = self.get_object()
+        meeting.soft_delete()
+        return Response(envelope(True, "Meeting deleted successfully"))
+
+
+class MeetingAttendeeViewSet(viewsets.ModelViewSet):
+    serializer_class = MeetingAttendeeSerializer
+    permission_classes = [IsManagerSupervisorLeaderOrReadOnly]
+
+    def get_queryset(self):
+        return MeetingAttendee.objects.select_related("meeting", "user")
+
+    def list(self, request, *args, **kwargs):
+        serializer = self.get_serializer(self.get_queryset(), many=True)
+        return Response(envelope(True, "Meeting attendees retrieved successfully", serializer.data))
+
+    def retrieve(self, request, *args, **kwargs):
+        serializer = self.get_serializer(self.get_object())
+        return Response(envelope(True, "Meeting attendee retrieved successfully", serializer.data))
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+
+        if serializer.is_valid():
+            serializer.save()
+            return Response(
+                envelope(True, "Meeting attendee added successfully", serializer.data),
+                status=status.HTTP_201_CREATED,
+            )
+
+        return Response(
+            envelope(False, "Validation failed", None, serializer.errors),
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop("partial", False)
+        serializer = self.get_serializer(self.get_object(), data=request.data, partial=partial)
+
+        if serializer.is_valid():
+            serializer.save()
+            return Response(envelope(True, "Meeting attendee updated successfully", serializer.data))
+
+        return Response(
+            envelope(False, "Validation failed", None, serializer.errors),
+            status=status.HTTP_400_BAD_REQUEST,
+        )

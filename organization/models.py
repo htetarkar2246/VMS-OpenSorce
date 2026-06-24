@@ -228,3 +228,156 @@ class Task(models.Model):
 
     def __str__(self):
         return self.title
+
+class Achievement(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="achievements",
+    )
+    team = models.ForeignKey(
+        Team,
+        on_delete=models.CASCADE,
+        related_name="achievements",
+    )
+    title = models.CharField(max_length=200)
+    description = models.TextField(blank=True, null=True)
+    achievement_date = models.DateField(null=True, blank=True)
+
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_achievements",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-achievement_date", "-created_at"]
+        indexes = [
+            models.Index(fields=["user"]),
+            models.Index(fields=["team"]),
+            models.Index(fields=["created_by"]),
+            models.Index(fields=["achievement_date"]),
+            models.Index(fields=["deleted_at"]),
+        ]
+
+    def soft_delete(self):
+        self.deleted_at = timezone.now()
+        self.save(update_fields=["deleted_at", "updated_at"])
+
+    def __str__(self):
+        return self.title
+
+
+class Meeting(models.Model):
+    class MeetingType(models.TextChoices):
+        ORG = "ORG", "Organization"
+        DEPARTMENT = "DEPARTMENT", "Department"
+        TEAM = "TEAM", "Team"
+
+    title = models.CharField(max_length=200)
+    description = models.TextField(blank=True, null=True)
+
+    meeting_type = models.CharField(
+        max_length=20,
+        choices=MeetingType.choices,
+        default=MeetingType.TEAM,
+    )
+
+    department = models.ForeignKey(
+        Department,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="meetings",
+    )
+    team = models.ForeignKey(
+        Team,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="meetings",
+    )
+
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_meetings",
+    )
+
+    start_datetime = models.DateTimeField()
+    end_datetime = models.DateTimeField()
+    location = models.CharField(max_length=255, blank=True, null=True)
+
+    google_event_id = models.CharField(max_length=255, blank=True, null=True)
+    google_calendar_link = models.URLField(blank=True, null=True)
+    is_synced_google = models.BooleanField(default=False)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["start_datetime"]
+        indexes = [
+            models.Index(fields=["meeting_type"]),
+            models.Index(fields=["department"]),
+            models.Index(fields=["team"]),
+            models.Index(fields=["created_by"]),
+            models.Index(fields=["start_datetime"]),
+            models.Index(fields=["deleted_at"]),
+        ]
+
+    def soft_delete(self):
+        self.deleted_at = timezone.now()
+        self.save(update_fields=["deleted_at", "updated_at"])
+
+    def __str__(self):
+        return self.title
+
+
+class MeetingAttendee(models.Model):
+    class Status(models.TextChoices):
+        INVITED = "INVITED", "Invited"
+        ATTENDED = "ATTENDED", "Attended"
+        ABSENT = "ABSENT", "Absent"
+
+    meeting = models.ForeignKey(
+        Meeting,
+        on_delete=models.CASCADE,
+        related_name="attendees",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="meeting_attendances",
+    )
+
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.INVITED,
+    )
+    notes = models.TextField(blank=True, null=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ("meeting", "user")
+        ordering = ["id"]
+        indexes = [
+            models.Index(fields=["meeting"]),
+            models.Index(fields=["user"]),
+            models.Index(fields=["status"]),
+        ]
+
+    def __str__(self):
+        return f"{self.meeting.title} - {self.user.name}"

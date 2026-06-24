@@ -1,6 +1,5 @@
 from django.contrib import admin
-from .models import Department, Team, TeamMember, Task
-
+from .models import Department, Team, TeamMember, Task, Achievement, Meeting, MeetingAttendee
 
 @admin.register(Department)
 class DepartmentAdmin(admin.ModelAdmin):
@@ -8,13 +7,21 @@ class DepartmentAdmin(admin.ModelAdmin):
         "id",
         "name",
         "supervisor",
+        "coordinator",
         "is_active",
         "created_at",
         "updated_at",
         "deleted_at",
     )
     list_filter = ("is_active", "created_at", "deleted_at")
-    search_fields = ("name", "description", "supervisor__name", "supervisor__email")
+    search_fields = (
+        "name",
+        "description",
+        "supervisor__name",
+        "supervisor__email",
+        "coordinator__name",
+        "coordinator__email",
+    )
     readonly_fields = ("created_at", "updated_at", "deleted_at")
 
 
@@ -86,3 +93,63 @@ class TaskAdmin(admin.ModelAdmin):
         "assigned_by__name",
     )
     readonly_fields = ("created_at", "updated_at", "deleted_at", "completed_at")
+
+@admin.register(Achievement)
+class AchievementAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "title",
+        "user",
+        "team",
+        "achievement_date",
+        "created_by",
+        "created_at",
+        "updated_at",
+        "deleted_at",
+    )
+    list_filter = ("team", "achievement_date", "created_at", "deleted_at")
+    search_fields = ("title", "description", "user__name", "team__name")
+    readonly_fields = ("created_at", "updated_at", "deleted_at")
+
+
+class MeetingAttendeeInline(admin.TabularInline):
+    model = MeetingAttendee
+    extra = 1
+
+
+@admin.register(Meeting)
+class MeetingAdmin(admin.ModelAdmin):
+    inlines = [MeetingAttendeeInline]
+
+    list_display = (
+        "id",
+        "title",
+        "meeting_type",
+        "department",
+        "team",
+        "start_datetime",
+        "end_datetime",
+        "created_by",
+        "is_synced_google",
+        "created_at",
+        "updated_at",
+        "deleted_at",
+    )
+    list_filter = ("meeting_type", "department", "team", "is_synced_google", "created_at", "deleted_at")
+    search_fields = ("title", "description", "location", "department__name", "team__name")
+    readonly_fields = (
+        "google_event_id",
+        "google_calendar_link",
+        "is_synced_google",
+        "created_at",
+        "updated_at",
+        "deleted_at",
+    )
+
+
+@admin.register(MeetingAttendee)
+class MeetingAttendeeAdmin(admin.ModelAdmin):
+    list_display = ("id", "meeting", "user", "status", "created_at", "updated_at")
+    list_filter = ("status", "created_at")
+    search_fields = ("meeting__title", "user__name", "user__email")
+    readonly_fields = ("created_at", "updated_at")
