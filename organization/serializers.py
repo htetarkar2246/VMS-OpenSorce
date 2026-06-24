@@ -1,10 +1,11 @@
 from rest_framework import serializers
 
-from .models import Department, Team
+from .models import Department, Team, TeamMember, Task
 
 
 class DepartmentSerializer(serializers.ModelSerializer):
     supervisor_name = serializers.CharField(source="supervisor.name", read_only=True)
+    coordinator_name = serializers.CharField(source="coordinator.name", read_only=True)
 
     class Meta:
         model = Department
@@ -14,6 +15,8 @@ class DepartmentSerializer(serializers.ModelSerializer):
             "description",
             "supervisor",
             "supervisor_name",
+            "coordinator",
+            "coordinator_name",
             "is_active",
             "created_at",
             "updated_at",
@@ -21,12 +24,12 @@ class DepartmentSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             "id",
+            "supervisor_name",
+            "coordinator_name",
             "created_at",
             "updated_at",
             "deleted_at",
-            "supervisor_name",
         ]
-
 
 class TeamSerializer(serializers.ModelSerializer):
     department_name = serializers.CharField(source="department.name", read_only=True)
@@ -57,6 +60,75 @@ class TeamSerializer(serializers.ModelSerializer):
             "department_name",
             "leader_name",
             "assistant_leader_name",
+            "created_at",
+            "updated_at",
+            "deleted_at",
+        ]
+class TeamMemberSerializer(serializers.ModelSerializer):
+    user_name = serializers.CharField(source="user.name", read_only=True)
+    user_email = serializers.EmailField(source="user.email", read_only=True)
+    team_name = serializers.CharField(source="team.name", read_only=True)
+
+    class Meta:
+        model = TeamMember
+        fields = [
+            "id",
+            "team",
+            "team_name",
+            "user",
+            "user_name",
+            "user_email",
+            "team_role",
+            "member_type",
+            "joined_at",
+            "is_active",
+            "created_at",
+            "updated_at",
+            "deleted_at",
+        ]
+        read_only_fields = [
+            "id",
+            "team_name",
+            "user_name",
+            "user_email",
+            "created_at",
+            "updated_at",
+            "deleted_at",
+        ]
+
+
+class TaskSerializer(serializers.ModelSerializer):
+    team_name = serializers.CharField(source="team.name", read_only=True)
+    assigned_to_name = serializers.CharField(source="assigned_to.name", read_only=True)
+    assigned_by_name = serializers.CharField(source="assigned_by.name", read_only=True)
+
+    class Meta:
+        model = Task
+        fields = [
+            "id",
+            "team",
+            "team_name",
+            "assigned_to",
+            "assigned_to_name",
+            "assigned_by",
+            "assigned_by_name",
+            "title",
+            "description",
+            "status",
+            "priority",
+            "due_date",
+            "completed_at",
+            "created_at",
+            "updated_at",
+            "deleted_at",
+        ]
+        read_only_fields = [
+            "id",
+            "team_name",
+            "assigned_to_name",
+            "assigned_by",
+            "assigned_by_name",
+            "completed_at",
             "created_at",
             "updated_at",
             "deleted_at",

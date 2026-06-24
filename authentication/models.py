@@ -42,6 +42,7 @@ class User(AbstractUser):
 
     class Role(models.TextChoices):
         MANAGER = "MANAGER", "Manager"
+        SUPERVISOR = "SUPERVISOR", "Supervisor"
         LEADER = "LEADER", "Leader"
         MEMBER = "MEMBER", "Member"
 
