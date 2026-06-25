@@ -2,11 +2,11 @@
 Django settings for vms_api project.
 """
 
-from pathlib import Path
 from datetime import timedelta
+from pathlib import Path
 
-from decouple import config
 import dj_database_url
+from decouple import config
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -22,6 +22,7 @@ ALLOWED_HOSTS = config(
 ).split(",")
 
 
+# Application definition
 INSTALLED_APPS = [
     # Django apps
     "django.contrib.admin",
@@ -30,15 +31,17 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+
     # Third-party
     "corsheaders",
     "rest_framework",
     "rest_framework_simplejwt",
     "rest_framework_simplejwt.token_blacklist",
     "drf_spectacular",
+
     # Local apps
     "authentication",
-    "organization"
+    "organization",
 ]
 
 
@@ -76,6 +79,7 @@ TEMPLATES = [
 WSGI_APPLICATION = "vms_api.wsgi.application"
 
 
+# Database
 DATABASES = {
     "default": dj_database_url.config(
         default=config("DATABASE_URL"),
@@ -85,6 +89,11 @@ DATABASES = {
 }
 
 
+# Custom User
+AUTH_USER_MODEL = "authentication.User"
+
+
+# Password validation
 AUTH_PASSWORD_VALIDATORS = [
     {
         "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
@@ -101,27 +110,43 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 
+# Internationalization
 LANGUAGE_CODE = "en-us"
-
 TIME_ZONE = "Asia/Yangon"
-
 USE_I18N = True
-
 USE_TZ = True
 
 
+# Static and media files
 STATIC_URL = "static/"
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# CORS — adjust origins for production frontends
+
+# CORS
 CORS_ALLOWED_ORIGINS = config(
     "CORS_ALLOWED_ORIGINS",
     default="http://localhost:3000,http://127.0.0.1:3000",
 ).split(",")
 
+CORS_ALLOW_CREDENTIALS = True
+
+
+# CSRF
+CSRF_TRUSTED_ORIGINS = config(
+    "CSRF_TRUSTED_ORIGINS",
+    default=(
+        "http://localhost:3000,"
+        "http://127.0.0.1:3000,"
+        "http://localhost:8000,"
+        "http://127.0.0.1:8000"
+    ),
+).split(",")
+
+
+# DRF
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
@@ -129,29 +154,33 @@ REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
 
+
+# Swagger 
 SPECTACULAR_SETTINGS = {
-    "TITLE": "UYA VMS API",
+    "TITLE": "VMS API",
     "DESCRIPTION": (
         "Volunteer Management System API.\n\n"
-        "All endpoints under `/api/auth/` return a standard envelope:\n"
+        "Most endpoints return a standard envelope:\n"
         "`{ success, message, data, errors }`.\n\n"
         "JWT login and refresh endpoints return `{ access, refresh }` directly."
     ),
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
     "COMPONENT_SPLIT_REQUEST": True,
-    "TAGS": [
-        {
-            "name": "Authentication",
-            "description": "Registration, login, profile, logout, and password reset.",
-        },
-    ],
-    "SECURITY": [{"jwtAuth": []}],
+    "CONTACT": {
+        "name": "Htet Arkar",
+        "email": "htetarkarlevi@gmail.com",
+    },
+    "LICENSE": {
+        "name": "MIT License",
+    },
     "SWAGGER_UI_SETTINGS": {
         "persistAuthorization": True,
     },
 }
 
+
+# JWT
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=60),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
@@ -159,8 +188,8 @@ SIMPLE_JWT = {
     "BLACKLIST_AFTER_ROTATION": True,
 }
 
-AUTH_USER_MODEL = "authentication.User"
 
+# Email / Gmail SMTP
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 EMAIL_HOST = config("EMAIL_HOST", default="smtp.gmail.com")
 EMAIL_PORT = config("EMAIL_PORT", default=587, cast=int)
