@@ -1,28 +1,39 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
-from .models import UserContact
-
 User = get_user_model()
 
 
-class UserContactSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = UserContact
-        fields = [
-            "id",
-            "contact_type",
-            "value",
-            "is_primary",
-            "created_at",
-            "updated_at",
-        ]
-        read_only_fields = ["id", "created_at", "updated_at"]
+def validate_profile_image(file):
+    if not file:
+        return file
+
+    allowed_content_types = [
+        "image/jpeg",
+        "image/png",
+        "image/webp",
+    ]
+
+    if file.content_type not in allowed_content_types:
+        raise serializers.ValidationError(
+            "Only JPG, JPEG, PNG and WEBP images are allowed."
+        )
+
+    max_size = 2 * 1024 * 1024  # 2MB
+
+    if file.size > max_size:
+        raise serializers.ValidationError(
+            "Profile photo size must not exceed 2MB."
+        )
+
+    return file
 
 
 class RegisterSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True, min_length=8)
-    contacts = UserContactSerializer(many=True, required=False)
+    password = serializers.CharField(
+        write_only=True,
+        min_length=8,
+    )
 
     class Meta:
         model = User
@@ -33,29 +44,29 @@ class RegisterSerializer(serializers.ModelSerializer):
             "name",
             "profile_photo",
             "phone",
+            "telegram_username",
             "role",
             "position",
             "join_date",
-            "contacts",
+        ]
+        read_only_fields = [
+            "id",
         ]
 
+    def validate_profile_photo(self, value):
+        return validate_profile_image(value)
+
     def create(self, validated_data):
-        contacts_data = validated_data.pop("contacts", [])
         password = validated_data.pop("password")
 
         user = User(**validated_data)
         user.set_password(password)
         user.save()
 
-        for contact in contacts_data:
-            UserContact.objects.create(user=user, **contact)
-
         return user
 
 
 class UserSerializer(serializers.ModelSerializer):
-    contacts = UserContactSerializer(many=True, read_only=True)
-
     class Meta:
         model = User
         fields = [
@@ -64,6 +75,7 @@ class UserSerializer(serializers.ModelSerializer):
             "name",
             "profile_photo",
             "phone",
+            "telegram_username",
             "role",
             "position",
             "join_date",
@@ -74,7 +86,6 @@ class UserSerializer(serializers.ModelSerializer):
             "last_login",
             "created_at",
             "updated_at",
-            "contacts",
         ]
         read_only_fields = [
             "id",
@@ -87,6 +98,9 @@ class UserSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
+
+    def validate_profile_photo(self, value):
+        return validate_profile_image(value)
 
 
 class ForgotPasswordSerializer(serializers.Serializer):
@@ -101,4 +115,7 @@ class VerifyOTPSerializer(serializers.Serializer):
 class ResetPasswordSerializer(serializers.Serializer):
     email = serializers.EmailField()
     otp = serializers.CharField(max_length=6)
-    new_password = serializers.CharField(write_only=True, min_length=8)
+    new_password = serializers.CharField(
+        write_only=True,
+        min_length=8,
+    )

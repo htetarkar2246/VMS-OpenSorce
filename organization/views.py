@@ -2,7 +2,7 @@ from rest_framework import status, viewsets
 from rest_framework.response import Response
 
 from .models import Department, Team, TeamMember, Task, Achievement, Meeting, MeetingAttendee
-from .permissions import IsManagerOrReadOnly, IsManagerOrSupervisorOrReadOnly, IsManagerSupervisorLeaderOrReadOnly
+from utils.permissions import IsManagerOrReadOnly, IsManagerOrSupervisorOrReadOnly, IsManagerSupervisorLeaderOrReadOnly
 from .serializers import (
     DepartmentSerializer,
     TeamSerializer,
