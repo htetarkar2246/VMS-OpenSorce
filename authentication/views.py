@@ -3,11 +3,13 @@ import random
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.mail import send_mail
-from rest_framework import generics, permissions, status
+from django.db.models import Q
+from rest_framework import generics, permissions, serializers, status, viewsets
 from rest_framework.views import APIView
+from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from utils.responses import success_response, error_response
+from utils.responses import error_response, success_response
 
 from .models import PasswordResetOTP
 from .serializers import (
@@ -19,6 +21,10 @@ from .serializers import (
 )
 
 User = get_user_model()
+
+
+class LogoutSerializer(serializers.Serializer):
+    refresh = serializers.CharField()
 
 
 class RegisterView(generics.CreateAPIView):
@@ -45,6 +51,7 @@ class RegisterView(generics.CreateAPIView):
 
 
 class MeView(APIView):
+    serializer_class = UserSerializer
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
@@ -54,7 +61,7 @@ class MeView(APIView):
         )
 
     def put(self, request):
-        serializer = UserSerializer(
+        serializer = self.serializer_class(
             request.user,
             data=request.data,
             partial=True,
@@ -75,41 +82,110 @@ class MeView(APIView):
         )
 
 
-class LogoutView(APIView):
+class UserManagementViewSet(viewsets.ModelViewSet):
+    serializer_class = UserSerializer
     permission_classes = [permissions.IsAuthenticated]
 
-    def post(self, request):
-        refresh = request.data.get("refresh")
+    def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False):
+            return User.objects.none()
 
-        if not refresh:
+        user = self.request.user
+        queryset = User.objects.filter(is_active=True)
+
+        if user.is_superuser or user.role == "MANAGER":
+            return queryset
+
+        if user.role == "SUPERVISOR":
+            return queryset.filter(
+                Q(team_memberships__team__department__supervisor=user)
+                | Q(team_memberships__team__department__coordinator=user)
+            ).distinct()
+
+        if user.role == "LEADER":
+            return queryset.filter(
+                Q(team_memberships__team__leader=user)
+                | Q(team_memberships__team__assistant_leader=user)
+            ).distinct()
+
+        return queryset.filter(id=user.id)
+
+    def list(self, request, *args, **kwargs):
+        serializer = self.get_serializer(self.get_queryset(), many=True)
+        return success_response("Users retrieved successfully.", serializer.data)
+
+    def retrieve(self, request, *args, **kwargs):
+        serializer = self.get_serializer(self.get_object())
+        return success_response("User retrieved successfully.", serializer.data)
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop("partial", False)
+
+        serializer = self.get_serializer(
+            self.get_object(),
+            data=request.data,
+            partial=partial,
+        )
+
+        if not serializer.is_valid():
             return error_response(
-                message="Refresh token is required.",
-                errors={
-                    "refresh": [
-                        "This field is required."
-                    ]
-                },
+                message="Validation failed.",
+                errors=serializer.errors,
                 status_code=status.HTTP_400_BAD_REQUEST,
             )
 
-        try:
-            RefreshToken(refresh).blacklist()
+        serializer.save()
 
-            return success_response(
-                message="Logged out successfully.",
+        return success_response("User updated successfully.", serializer.data)
+
+    def destroy(self, request, *args, **kwargs):
+        user = self.get_object()
+
+        if request.user.id == user.id:
+            return error_response(
+                message="You cannot remove your own account.",
+                status_code=status.HTTP_400_BAD_REQUEST,
             )
 
-        except Exception:
+        user.is_active = False
+        user.save(update_fields=["is_active"])
+
+        return success_response(message="User removed successfully.")
+
+
+class LogoutView(APIView):
+    serializer_class = LogoutSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        serializer = self.serializer_class(data=request.data)
+
+        if not serializer.is_valid():
+            return error_response(
+                message="Validation failed.",
+                errors=serializer.errors,
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+
+        refresh = serializer.validated_data["refresh"]
+
+        try:
+            RefreshToken(refresh).blacklist()
+            return success_response(message="Logged out successfully.")
+
+        except TokenError:
             return error_response(
                 message="Invalid refresh token.",
                 status_code=status.HTTP_400_BAD_REQUEST,
             )
 
+
 class ForgotPasswordView(APIView):
+    serializer_class = ForgotPasswordSerializer
     permission_classes = [permissions.AllowAny]
 
     def post(self, request):
-        serializer = ForgotPasswordSerializer(data=request.data)
+        serializer = self.serializer_class(data=request.data)
 
         if not serializer.is_valid():
             return error_response(
@@ -119,7 +195,6 @@ class ForgotPasswordView(APIView):
             )
 
         email = serializer.validated_data["email"]
-
         user = User.objects.filter(email=email).first()
 
         if not user:
@@ -128,42 +203,42 @@ class ForgotPasswordView(APIView):
                 status_code=status.HTTP_404_NOT_FOUND,
             )
 
-        # Invalidate previous unused OTPs
-        PasswordResetOTP.objects.filter(
-            user=user,
-            is_used=False,
-        ).update(is_used=True)
+        PasswordResetOTP.objects.filter(user=user, is_used=False).update(is_used=True)
 
         otp = str(random.randint(100000, 999999))
+        PasswordResetOTP.objects.create(user=user, otp=otp)
 
-        PasswordResetOTP.objects.create(
-            user=user,
-            otp=otp,
-        )
-
-        send_mail(
-            subject="VMS Password Reset OTP",
-            message=(
-                f"Hello {user.name},\n\n"
-                f"Your One-Time Password (OTP) is: {otp}\n\n"
-                "This OTP will expire in 10 minutes.\n"
-                "If you did not request this password reset, please ignore this email."
-            ),
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[email],
-            fail_silently=False,
-        )
+        try:
+            send_mail(
+                subject="VMS Password Reset OTP",
+                message=(
+                    f"Hello {user.name},\n\n"
+                    f"Your One-Time Password (OTP) is: {otp}\n\n"
+                    "This OTP will expire in 10 minutes.\n"
+                    "If you did not request this password reset, please ignore this email."
+                ),
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[email],
+                fail_silently=False,
+            )
+        except Exception:
+            return error_response(
+                message="Failed to send OTP email.",
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
         return success_response(
             message="OTP has been sent to your email.",
+            status_code=status.HTTP_201_CREATED,
         )
 
 
 class VerifyOTPView(APIView):
+    serializer_class = VerifyOTPSerializer
     permission_classes = [permissions.AllowAny]
 
     def post(self, request):
-        serializer = VerifyOTPSerializer(data=request.data)
+        serializer = self.serializer_class(data=request.data)
 
         if not serializer.is_valid():
             return error_response(
@@ -184,11 +259,7 @@ class VerifyOTPView(APIView):
             )
 
         otp_obj = (
-            PasswordResetOTP.objects.filter(
-                user=user,
-                otp=otp,
-                is_used=False,
-            )
+            PasswordResetOTP.objects.filter(user=user, otp=otp, is_used=False)
             .order_by("-created_at")
             .first()
         )
@@ -205,16 +276,15 @@ class VerifyOTPView(APIView):
                 status_code=status.HTTP_400_BAD_REQUEST,
             )
 
-        return success_response(
-            message="OTP verified successfully.",
-        )
+        return success_response(message="OTP verified successfully.")
 
 
 class ResetPasswordView(APIView):
+    serializer_class = ResetPasswordSerializer
     permission_classes = [permissions.AllowAny]
 
     def post(self, request):
-        serializer = ResetPasswordSerializer(data=request.data)
+        serializer = self.serializer_class(data=request.data)
 
         if not serializer.is_valid():
             return error_response(
@@ -236,11 +306,7 @@ class ResetPasswordView(APIView):
             )
 
         otp_obj = (
-            PasswordResetOTP.objects.filter(
-                user=user,
-                otp=otp,
-                is_used=False,
-            )
+            PasswordResetOTP.objects.filter(user=user, otp=otp, is_used=False)
             .order_by("-created_at")
             .first()
         )
@@ -260,9 +326,11 @@ class ResetPasswordView(APIView):
         user.set_password(new_password)
         user.save()
 
-        otp_obj.is_used = True
-        otp_obj.save(update_fields=["is_used"])
+        if hasattr(otp_obj, "mark_used"):
+            otp_obj.mark_used()
+        else:
+            otp_obj.is_used = True
+            otp_obj.save(update_fields=["is_used"])
 
-        return success_response(
-            message="Password reset successfully.",
-        )
+        return success_response(message="Password reset successfully.")
+
