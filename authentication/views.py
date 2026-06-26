@@ -1,3 +1,5 @@
+"""Authentication and account-management endpoints."""
+
 import random
 
 from django.conf import settings
@@ -27,7 +29,18 @@ class LogoutSerializer(serializers.Serializer):
     refresh = serializers.CharField()
 
 
+def _invalid_serializer_response(serializer):
+    """Return the standard validation error payload for a serializer."""
+    return error_response(
+        message="Validation failed.",
+        errors=serializer.errors,
+        status_code=status.HTTP_400_BAD_REQUEST,
+    )
+
+
 class RegisterView(generics.CreateAPIView):
+    """Create a new user account."""
+
     serializer_class = RegisterSerializer
     permission_classes = [permissions.AllowAny]
 
@@ -35,11 +48,7 @@ class RegisterView(generics.CreateAPIView):
         serializer = self.get_serializer(data=request.data)
 
         if not serializer.is_valid():
-            return error_response(
-                message="Validation failed.",
-                errors=serializer.errors,
-                status_code=status.HTTP_400_BAD_REQUEST,
-            )
+            return _invalid_serializer_response(serializer)
 
         user = serializer.save()
 
@@ -51,6 +60,8 @@ class RegisterView(generics.CreateAPIView):
 
 
 class MeView(APIView):
+    """Retrieve or update the authenticated user's profile."""
+
     serializer_class = UserSerializer
     permission_classes = [permissions.IsAuthenticated]
 
@@ -68,11 +79,7 @@ class MeView(APIView):
         )
 
         if not serializer.is_valid():
-            return error_response(
-                message="Validation failed.",
-                errors=serializer.errors,
-                status_code=status.HTTP_400_BAD_REQUEST,
-            )
+            return _invalid_serializer_response(serializer)
 
         serializer.save()
 
@@ -83,6 +90,8 @@ class MeView(APIView):
 
 
 class UserManagementViewSet(viewsets.ModelViewSet):
+    """Expose user records with role-aware visibility and soft delete."""
+
     serializer_class = UserSerializer
     permission_classes = [permissions.IsAuthenticated]
 
@@ -93,15 +102,18 @@ class UserManagementViewSet(viewsets.ModelViewSet):
         user = self.request.user
         queryset = User.objects.filter(is_active=True)
 
+        # Managers see all active users.
         if user.is_superuser or user.role == "MANAGER":
             return queryset
 
+        # Supervisors can see users in departments they supervise or coordinate.
         if user.role == "SUPERVISOR":
             return queryset.filter(
                 Q(team_memberships__team__department__supervisor=user)
                 | Q(team_memberships__team__department__coordinator=user)
             ).distinct()
 
+        # Leaders can see members of teams they lead.
         if user.role == "LEADER":
             return queryset.filter(
                 Q(team_memberships__team__leader=user)
@@ -128,11 +140,7 @@ class UserManagementViewSet(viewsets.ModelViewSet):
         )
 
         if not serializer.is_valid():
-            return error_response(
-                message="Validation failed.",
-                errors=serializer.errors,
-                status_code=status.HTTP_400_BAD_REQUEST,
-            )
+            return _invalid_serializer_response(serializer)
 
         serializer.save()
 
@@ -154,6 +162,8 @@ class UserManagementViewSet(viewsets.ModelViewSet):
 
 
 class LogoutView(APIView):
+    """Blacklist a refresh token to end the session."""
+
     serializer_class = LogoutSerializer
     permission_classes = [permissions.IsAuthenticated]
 
@@ -161,11 +171,7 @@ class LogoutView(APIView):
         serializer = self.serializer_class(data=request.data)
 
         if not serializer.is_valid():
-            return error_response(
-                message="Validation failed.",
-                errors=serializer.errors,
-                status_code=status.HTTP_400_BAD_REQUEST,
-            )
+            return _invalid_serializer_response(serializer)
 
         refresh = serializer.validated_data["refresh"]
 
@@ -181,6 +187,8 @@ class LogoutView(APIView):
 
 
 class ForgotPasswordView(APIView):
+    """Start the password reset flow by emailing a one-time code."""
+
     serializer_class = ForgotPasswordSerializer
     permission_classes = [permissions.AllowAny]
 
@@ -188,11 +196,7 @@ class ForgotPasswordView(APIView):
         serializer = self.serializer_class(data=request.data)
 
         if not serializer.is_valid():
-            return error_response(
-                message="Validation failed.",
-                errors=serializer.errors,
-                status_code=status.HTTP_400_BAD_REQUEST,
-            )
+            return _invalid_serializer_response(serializer)
 
         email = serializer.validated_data["email"]
         user = User.objects.filter(email=email).first()
@@ -234,6 +238,8 @@ class ForgotPasswordView(APIView):
 
 
 class VerifyOTPView(APIView):
+    """Check whether a submitted OTP is valid and still active."""
+
     serializer_class = VerifyOTPSerializer
     permission_classes = [permissions.AllowAny]
 
@@ -241,11 +247,7 @@ class VerifyOTPView(APIView):
         serializer = self.serializer_class(data=request.data)
 
         if not serializer.is_valid():
-            return error_response(
-                message="Validation failed.",
-                errors=serializer.errors,
-                status_code=status.HTTP_400_BAD_REQUEST,
-            )
+            return _invalid_serializer_response(serializer)
 
         email = serializer.validated_data["email"]
         otp = serializer.validated_data["otp"]
@@ -280,6 +282,8 @@ class VerifyOTPView(APIView):
 
 
 class ResetPasswordView(APIView):
+    """Set a new password once the user has proven OTP ownership."""
+
     serializer_class = ResetPasswordSerializer
     permission_classes = [permissions.AllowAny]
 
@@ -287,11 +291,7 @@ class ResetPasswordView(APIView):
         serializer = self.serializer_class(data=request.data)
 
         if not serializer.is_valid():
-            return error_response(
-                message="Validation failed.",
-                errors=serializer.errors,
-                status_code=status.HTTP_400_BAD_REQUEST,
-            )
+            return _invalid_serializer_response(serializer)
 
         email = serializer.validated_data["email"]
         otp = serializer.validated_data["otp"]
@@ -326,11 +326,8 @@ class ResetPasswordView(APIView):
         user.set_password(new_password)
         user.save()
 
-        if hasattr(otp_obj, "mark_used"):
-            otp_obj.mark_used()
-        else:
-            otp_obj.is_used = True
-            otp_obj.save(update_fields=["is_used"])
+        otp_obj.mark_used()
 
         return success_response(message="Password reset successfully.")
 
+        

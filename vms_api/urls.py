@@ -1,3 +1,5 @@
+"""Project URL configuration."""
+
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
@@ -12,7 +14,7 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/auth/", include("authentication.urls")),
     path("api/organization/", include("organization.urls")),
-    # OpenAPI schema & documentation
+    # Schema and interactive API documentation.
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path(
         "api/docs/",

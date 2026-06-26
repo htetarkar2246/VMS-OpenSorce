@@ -5,6 +5,7 @@ User = get_user_model()
 
 
 def validate_profile_image(file):
+    """Validate uploaded profile photos before they reach storage."""
     if not file:
         return file
 
@@ -19,7 +20,7 @@ def validate_profile_image(file):
             "Only JPG, JPEG, PNG and WEBP images are allowed."
         )
 
-    max_size = 2 * 1024 * 1024  # 2MB
+    max_size = 2 * 1024 * 1024  # 2 MB
 
     if file.size > max_size:
         raise serializers.ValidationError(
@@ -30,6 +31,8 @@ def validate_profile_image(file):
 
 
 class RegisterSerializer(serializers.ModelSerializer):
+    """Serializer used for public user registration."""
+
     password = serializers.CharField(
         write_only=True,
         min_length=8,
@@ -67,6 +70,8 @@ class RegisterSerializer(serializers.ModelSerializer):
 
 
 class UserSerializer(serializers.ModelSerializer):
+    """Serializer for authenticated user profile data."""
+
     class Meta:
         model = User
         fields = [
@@ -104,15 +109,21 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class ForgotPasswordSerializer(serializers.Serializer):
+    """Collect the email address for password reset flow."""
+
     email = serializers.EmailField()
 
 
 class VerifyOTPSerializer(serializers.Serializer):
+    """Validate the email and OTP pair submitted by the user."""
+
     email = serializers.EmailField()
     otp = serializers.CharField(max_length=6)
 
 
 class ResetPasswordSerializer(serializers.Serializer):
+    """Accept the verified OTP and a new password."""
+
     email = serializers.EmailField()
     otp = serializers.CharField(max_length=6)
     new_password = serializers.CharField(

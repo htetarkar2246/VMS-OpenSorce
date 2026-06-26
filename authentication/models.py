@@ -148,10 +148,16 @@ class PasswordResetOTP(models.Model):
         ]
 
     def is_expired(self):
+        """Check whether the OTP has passed its validity window."""
         return (
             timezone.now()
             > self.created_at + timedelta(minutes=self.OTP_TTL_MINUTES)
         )
+
+    def mark_used(self):
+        """Mark the OTP as consumed so it cannot be reused."""
+        self.is_used = True
+        self.save(update_fields=["is_used"])
 
     def __str__(self):
         return f"{self.user.email} - {self.otp}"

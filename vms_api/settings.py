@@ -1,6 +1,4 @@
-"""
-Django settings for vms_api project.
-"""
+"""Core Django settings for the VMS API."""
 
 from datetime import timedelta
 from pathlib import Path
@@ -22,7 +20,7 @@ ALLOWED_HOSTS = config(
 ).split(",")
 
 
-# Application definition
+# Installed apps are grouped by framework, third-party packages, then local apps.
 INSTALLED_APPS = [
     # Django apps
     "django.contrib.admin",
@@ -79,17 +77,22 @@ TEMPLATES = [
 WSGI_APPLICATION = "vms_api.wsgi.application"
 
 
-# Database
+# Database configuration comes from `DATABASE_URL` so the project stays twelve-factor friendly.
+DATABASE_URL = config(
+    "DATABASE_URL",
+    default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
+)
+
 DATABASES = {
     "default": dj_database_url.config(
-        default=config("DATABASE_URL"),
+        default=DATABASE_URL,
         conn_max_age=600,
-        ssl_require=True,
+        ssl_require=DATABASE_URL.startswith("postgres"),
     )
 }
 
 
-# Custom User
+# Use the custom user model everywhere in the project.
 AUTH_USER_MODEL = "authentication.User"
 
 
@@ -117,7 +120,7 @@ USE_I18N = True
 USE_TZ = True
 
 
-# Static and media files
+# Static assets are served separately from uploaded media files.
 STATIC_URL = "static/"
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
@@ -125,7 +128,7 @@ MEDIA_ROOT = BASE_DIR / "media"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 
-# CORS
+# CORS is intentionally restricted to the frontend origins used during development.
 CORS_ALLOWED_ORIGINS = config(
     "CORS_ALLOWED_ORIGINS",
     default="http://localhost:3000,http://127.0.0.1:3000",
@@ -134,7 +137,7 @@ CORS_ALLOWED_ORIGINS = config(
 CORS_ALLOW_CREDENTIALS = True
 
 
-# CSRF
+# CSRF trusted origins should match any browser-based clients that submit forms.
 CSRF_TRUSTED_ORIGINS = config(
     "CSRF_TRUSTED_ORIGINS",
     default=(
@@ -146,7 +149,7 @@ CSRF_TRUSTED_ORIGINS = config(
 ).split(",")
 
 
-# DRF
+# DRF uses JWT auth and a shared OpenAPI schema definition.
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
@@ -155,7 +158,7 @@ REST_FRAMEWORK = {
 }
 
 
-# Swagger 
+# OpenAPI / Swagger metadata shown in the documentation UI.
 SPECTACULAR_SETTINGS = {
     "TITLE": "VMS API",
     "DESCRIPTION": (
@@ -180,7 +183,7 @@ SPECTACULAR_SETTINGS = {
 }
 
 
-# JWT
+# JWT lifetimes balance UX with token revocation safety.
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=60),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
@@ -189,7 +192,7 @@ SIMPLE_JWT = {
 }
 
 
-# Email / Gmail SMTP
+# Email settings are sourced from the environment to support multiple deployments.
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 EMAIL_HOST = config("EMAIL_HOST", default="smtp.gmail.com")
 EMAIL_PORT = config("EMAIL_PORT", default=587, cast=int)

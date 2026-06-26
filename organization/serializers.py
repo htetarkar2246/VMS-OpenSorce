@@ -1,9 +1,21 @@
+"""Serializer layer for organization and collaboration endpoints."""
+
 from rest_framework import serializers
 
-from .models import Department, Team, TeamMember, Task, Achievement, Meeting, MeetingAttendee   
+from .models import (
+    Achievement,
+    Department,
+    Meeting,
+    MeetingAttendee,
+    Task,
+    Team,
+    TeamMember,
+)
 
 
 class DepartmentSerializer(serializers.ModelSerializer):
+    """Expose department details with human-readable staff names."""
+
     supervisor_name = serializers.CharField(source="supervisor.name", read_only=True)
     coordinator_name = serializers.CharField(source="coordinator.name", read_only=True)
 
@@ -31,7 +43,10 @@ class DepartmentSerializer(serializers.ModelSerializer):
             "deleted_at",
         ]
 
+
 class TeamSerializer(serializers.ModelSerializer):
+    """Expose team details with related department and lead names."""
+
     department_name = serializers.CharField(source="department.name", read_only=True)
     leader_name = serializers.CharField(source="leader.name", read_only=True)
     assistant_leader_name = serializers.CharField(
@@ -64,7 +79,11 @@ class TeamSerializer(serializers.ModelSerializer):
             "updated_at",
             "deleted_at",
         ]
+
+
 class TeamMemberSerializer(serializers.ModelSerializer):
+    """Serialize team membership assignments with friendly display fields."""
+
     user_name = serializers.CharField(source="user.name", read_only=True)
     user_email = serializers.EmailField(source="user.email", read_only=True)
     team_name = serializers.CharField(source="team.name", read_only=True)
@@ -98,6 +117,8 @@ class TeamMemberSerializer(serializers.ModelSerializer):
 
 
 class TaskSerializer(serializers.ModelSerializer):
+    """Serialize tasks with team and assignment context."""
+
     team_name = serializers.CharField(source="team.name", read_only=True)
     assigned_to_name = serializers.CharField(source="assigned_to.name", read_only=True)
     assigned_by_name = serializers.CharField(source="assigned_by.name", read_only=True)
@@ -133,7 +154,11 @@ class TaskSerializer(serializers.ModelSerializer):
             "updated_at",
             "deleted_at",
         ]
+
+
 class AchievementSerializer(serializers.ModelSerializer):
+    """Serialize achievements with related user and team labels."""
+
     user_name = serializers.CharField(source="user.name", read_only=True)
     team_name = serializers.CharField(source="team.name", read_only=True)
     created_by_name = serializers.CharField(source="created_by.name", read_only=True)
@@ -168,6 +193,8 @@ class AchievementSerializer(serializers.ModelSerializer):
 
 
 class MeetingAttendeeSerializer(serializers.ModelSerializer):
+    """Serialize attendee records with user-friendly identity fields."""
+
     user_name = serializers.CharField(source="user.name", read_only=True)
     user_email = serializers.EmailField(source="user.email", read_only=True)
 
@@ -188,6 +215,8 @@ class MeetingAttendeeSerializer(serializers.ModelSerializer):
 
 
 class MeetingSerializer(serializers.ModelSerializer):
+    """Serialize meetings together with nested attendees."""
+
     department_name = serializers.CharField(source="department.name", read_only=True)
     team_name = serializers.CharField(source="team.name", read_only=True)
     created_by_name = serializers.CharField(source="created_by.name", read_only=True)

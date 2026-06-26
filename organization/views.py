@@ -1,8 +1,9 @@
+"""Organization endpoints for departments, teams, and related activity."""
+
 from django.contrib.auth import get_user_model
 from django.db.models import Q
-from rest_framework import permissions, status, viewsets
+from rest_framework import status, viewsets
 
-from authentication.serializers import UserSerializer
 from utils.permissions import (
     IsManagerOrReadOnly,
     IsManagerOrSupervisorOrReadOnly,
@@ -31,7 +32,19 @@ from .serializers import (
 
 User = get_user_model()
 
+
+def _invalid_serializer_response(serializer):
+    """Return the standard validation error payload for a serializer."""
+    return error_response(
+        message="Validation failed.",
+        errors=serializer.errors,
+        status_code=status.HTTP_400_BAD_REQUEST,
+    )
+
+
 class DepartmentViewSet(viewsets.ModelViewSet):
+    """Manage departments with soft deletion and role-aware access."""
+
     serializer_class = DepartmentSerializer
     permission_classes = [IsManagerOrReadOnly]
 
@@ -42,9 +55,11 @@ class DepartmentViewSet(viewsets.ModelViewSet):
         user = self.request.user
         queryset = Department.objects.filter(deleted_at__isnull=True)
 
+        # Managers and admins can see every active department.
         if user.is_superuser or user.role == "MANAGER":
             return queryset
 
+        # Supervisors can see departments where they hold a direct role.
         if user.role == "SUPERVISOR":
             return queryset.filter(Q(supervisor=user) | Q(coordinator=user))
 
@@ -62,11 +77,7 @@ class DepartmentViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(data=request.data)
 
         if not serializer.is_valid():
-            return error_response(
-                message="Validation failed.",
-                errors=serializer.errors,
-                status_code=status.HTTP_400_BAD_REQUEST,
-            )
+            return _invalid_serializer_response(serializer)
 
         serializer.save()
 
@@ -86,11 +97,7 @@ class DepartmentViewSet(viewsets.ModelViewSet):
         )
 
         if not serializer.is_valid():
-            return error_response(
-                message="Validation failed.",
-                errors=serializer.errors,
-                status_code=status.HTTP_400_BAD_REQUEST,
-            )
+            return _invalid_serializer_response(serializer)
 
         serializer.save()
 
@@ -110,6 +117,8 @@ class DepartmentViewSet(viewsets.ModelViewSet):
 
 
 class TeamViewSet(viewsets.ModelViewSet):
+    """Manage teams within departments."""
+
     serializer_class = TeamSerializer
     permission_classes = [IsManagerOrSupervisorOrReadOnly]
 
@@ -125,17 +134,21 @@ class TeamViewSet(viewsets.ModelViewSet):
             "assistant_leader",
         )
 
+        # Managers can see every active team.
         if user.is_superuser or user.role == "MANAGER":
             return queryset
 
+        # Supervisors are limited to teams in their departments.
         if user.role == "SUPERVISOR":
             return queryset.filter(
                 Q(department__supervisor=user) | Q(department__coordinator=user)
             )
 
+        # Leaders can see the teams they are responsible for.
         if user.role == "LEADER":
             return queryset.filter(Q(leader=user) | Q(assistant_leader=user))
 
+        # Members only see teams they are assigned to.
         if user.role == "MEMBER":
             return queryset.filter(
                 memberships__user=user,
@@ -157,11 +170,7 @@ class TeamViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(data=request.data)
 
         if not serializer.is_valid():
-            return error_response(
-                message="Validation failed.",
-                errors=serializer.errors,
-                status_code=status.HTTP_400_BAD_REQUEST,
-            )
+            return _invalid_serializer_response(serializer)
 
         serializer.save()
 
@@ -178,11 +187,7 @@ class TeamViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(team, data=request.data, partial=partial)
 
         if not serializer.is_valid():
-            return error_response(
-                message="Validation failed.",
-                errors=serializer.errors,
-                status_code=status.HTTP_400_BAD_REQUEST,
-            )
+            return _invalid_serializer_response(serializer)
 
         if request.user.role == "SUPERVISOR" and not request.user.is_superuser:
             new_department = serializer.validated_data.get("department", team.department)
@@ -217,6 +222,8 @@ class TeamViewSet(viewsets.ModelViewSet):
 
 
 class TeamMemberViewSet(viewsets.ModelViewSet):
+    """Manage team membership assignments."""
+
     serializer_class = TeamMemberSerializer
     permission_classes = [IsManagerOrSupervisorOrReadOnly]
 
@@ -232,20 +239,24 @@ class TeamMemberViewSet(viewsets.ModelViewSet):
             "user",
         )
 
+        # Managers and admins can see every active membership.
         if user.is_superuser or user.role == "MANAGER":
             return queryset
 
+        # Supervisors can see memberships inside their departments.
         if user.role == "SUPERVISOR":
             return queryset.filter(
                 Q(team__department__supervisor=user)
                 | Q(team__department__coordinator=user)
             )
 
+        # Leaders can see the memberships for the teams they lead.
         if user.role == "LEADER":
             return queryset.filter(
                 Q(team__leader=user) | Q(team__assistant_leader=user)
             )
 
+        # Members can only see their own membership rows.
         if user.role == "MEMBER":
             return queryset.filter(user=user)
 
@@ -263,11 +274,7 @@ class TeamMemberViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(data=request.data)
 
         if not serializer.is_valid():
-            return error_response(
-                message="Validation failed.",
-                errors=serializer.errors,
-                status_code=status.HTTP_400_BAD_REQUEST,
-            )
+            return _invalid_serializer_response(serializer)
 
         serializer.save()
 
@@ -287,11 +294,7 @@ class TeamMemberViewSet(viewsets.ModelViewSet):
         )
 
         if not serializer.is_valid():
-            return error_response(
-                message="Validation failed.",
-                errors=serializer.errors,
-                status_code=status.HTTP_400_BAD_REQUEST,
-            )
+            return _invalid_serializer_response(serializer)
 
         serializer.save()
 
@@ -305,6 +308,8 @@ class TeamMemberViewSet(viewsets.ModelViewSet):
 
 
 class TaskViewSet(viewsets.ModelViewSet):
+    """Manage tasks with role-aware visibility."""
+
     serializer_class = TaskSerializer
     permission_classes = [IsManagerSupervisorLeaderOrReadOnly]
 
@@ -321,18 +326,22 @@ class TaskViewSet(viewsets.ModelViewSet):
             "assigned_by",
         )
 
+        # Managers and admins can see every active task.
         if user.is_superuser or user.role == "MANAGER":
             return queryset
 
+        # Supervisors can see tasks within the departments they oversee.
         if user.role == "SUPERVISOR":
             return queryset.filter(
                 Q(team__department__supervisor=user)
                 | Q(team__department__coordinator=user)
             )
 
+        # Leaders can see tasks for the teams they manage.
         if user.role == "LEADER":
             return queryset.filter(Q(team__leader=user) | Q(team__assistant_leader=user))
 
+        # Members only see tasks assigned directly to them.
         if user.role == "MEMBER":
             return queryset.filter(assigned_to=user)
 
@@ -350,11 +359,7 @@ class TaskViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(data=request.data)
 
         if not serializer.is_valid():
-            return error_response(
-                message="Validation failed.",
-                errors=serializer.errors,
-                status_code=status.HTTP_400_BAD_REQUEST,
-            )
+            return _invalid_serializer_response(serializer)
 
         serializer.save(assigned_by=request.user)
 
@@ -371,11 +376,7 @@ class TaskViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(task, data=request.data, partial=partial)
 
         if not serializer.is_valid():
-            return error_response(
-                message="Validation failed.",
-                errors=serializer.errors,
-                status_code=status.HTTP_400_BAD_REQUEST,
-            )
+            return _invalid_serializer_response(serializer)
 
         updated_task = serializer.save()
 
@@ -395,6 +396,8 @@ class TaskViewSet(viewsets.ModelViewSet):
 
 
 class AchievementViewSet(viewsets.ModelViewSet):
+    """Manage achievements with restricted visibility by role."""
+
     serializer_class = AchievementSerializer
     permission_classes = [IsManagerSupervisorLeaderOrReadOnly]
 
@@ -411,18 +414,22 @@ class AchievementViewSet(viewsets.ModelViewSet):
             "created_by",
         )
 
+        # Managers and admins can see all achievements.
         if user.is_superuser or user.role == "MANAGER":
             return queryset
 
+        # Supervisors can see achievements in the departments they oversee.
         if user.role == "SUPERVISOR":
             return queryset.filter(
                 Q(team__department__supervisor=user)
                 | Q(team__department__coordinator=user)
             )
 
+        # Leaders can see achievements associated with their teams.
         if user.role == "LEADER":
             return queryset.filter(Q(team__leader=user) | Q(team__assistant_leader=user))
 
+        # Members can see only their own achievements.
         if user.role == "MEMBER":
             return queryset.filter(user=user)
 
@@ -440,11 +447,7 @@ class AchievementViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(data=request.data)
 
         if not serializer.is_valid():
-            return error_response(
-                message="Validation failed.",
-                errors=serializer.errors,
-                status_code=status.HTTP_400_BAD_REQUEST,
-            )
+            return _invalid_serializer_response(serializer)
 
         serializer.save(created_by=request.user)
 
@@ -464,11 +467,7 @@ class AchievementViewSet(viewsets.ModelViewSet):
         )
 
         if not serializer.is_valid():
-            return error_response(
-                message="Validation failed.",
-                errors=serializer.errors,
-                status_code=status.HTTP_400_BAD_REQUEST,
-            )
+            return _invalid_serializer_response(serializer)
 
         serializer.save()
 
@@ -482,6 +481,8 @@ class AchievementViewSet(viewsets.ModelViewSet):
 
 
 class MeetingViewSet(viewsets.ModelViewSet):
+    """Manage meetings and nested attendee information."""
+
     serializer_class = MeetingSerializer
     permission_classes = [IsManagerSupervisorLeaderOrReadOnly]
 
@@ -498,9 +499,11 @@ class MeetingViewSet(viewsets.ModelViewSet):
             "created_by",
         ).prefetch_related("attendees")
 
+        # Managers and admins can see every active meeting.
         if user.is_superuser or user.role == "MANAGER":
             return queryset
 
+        # Supervisors can see meetings for departments they oversee directly.
         if user.role == "SUPERVISOR":
             return queryset.filter(
                 Q(department__supervisor=user)
@@ -509,9 +512,11 @@ class MeetingViewSet(viewsets.ModelViewSet):
                 | Q(team__department__coordinator=user)
             ).distinct()
 
+        # Leaders can see meetings for their own teams.
         if user.role == "LEADER":
             return queryset.filter(Q(team__leader=user) | Q(team__assistant_leader=user))
 
+        # Members can see meetings they are invited to or assigned through a team.
         if user.role == "MEMBER":
             return queryset.filter(
                 Q(attendees__user=user) | Q(team__memberships__user=user)
@@ -531,11 +536,7 @@ class MeetingViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(data=request.data)
 
         if not serializer.is_valid():
-            return error_response(
-                message="Validation failed.",
-                errors=serializer.errors,
-                status_code=status.HTTP_400_BAD_REQUEST,
-            )
+            return _invalid_serializer_response(serializer)
 
         serializer.save(created_by=request.user)
 
@@ -555,11 +556,7 @@ class MeetingViewSet(viewsets.ModelViewSet):
         )
 
         if not serializer.is_valid():
-            return error_response(
-                message="Validation failed.",
-                errors=serializer.errors,
-                status_code=status.HTTP_400_BAD_REQUEST,
-            )
+            return _invalid_serializer_response(serializer)
 
         serializer.save()
 
@@ -573,6 +570,8 @@ class MeetingViewSet(viewsets.ModelViewSet):
 
 
 class MeetingAttendeeViewSet(viewsets.ModelViewSet):
+    """Manage meeting attendance records."""
+
     serializer_class = MeetingAttendeeSerializer
     permission_classes = [IsManagerSupervisorLeaderOrReadOnly]
 
@@ -590,9 +589,11 @@ class MeetingAttendeeViewSet(viewsets.ModelViewSet):
             "user",
         )
 
+        # Managers and admins can see all attendance rows.
         if user.is_superuser or user.role == "MANAGER":
             return queryset
 
+        # Supervisors can see attendance for meetings in their scope.
         if user.role == "SUPERVISOR":
             return queryset.filter(
                 Q(meeting__department__supervisor=user)
@@ -601,11 +602,13 @@ class MeetingAttendeeViewSet(viewsets.ModelViewSet):
                 | Q(meeting__team__department__coordinator=user)
             ).distinct()
 
+        # Leaders can see attendance for their teams.
         if user.role == "LEADER":
             return queryset.filter(
                 Q(meeting__team__leader=user) | Q(meeting__team__assistant_leader=user)
             )
 
+        # Members can see only their own attendance rows.
         if user.role == "MEMBER":
             return queryset.filter(user=user)
 
@@ -626,11 +629,7 @@ class MeetingAttendeeViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(data=request.data)
 
         if not serializer.is_valid():
-            return error_response(
-                message="Validation failed.",
-                errors=serializer.errors,
-                status_code=status.HTTP_400_BAD_REQUEST,
-            )
+            return _invalid_serializer_response(serializer)
 
         serializer.save()
 
@@ -650,11 +649,7 @@ class MeetingAttendeeViewSet(viewsets.ModelViewSet):
         )
 
         if not serializer.is_valid():
-            return error_response(
-                message="Validation failed.",
-                errors=serializer.errors,
-                status_code=status.HTTP_400_BAD_REQUEST,
-            )
+            return _invalid_serializer_response(serializer)
 
         serializer.save()
 
@@ -668,3 +663,4 @@ class MeetingAttendeeViewSet(viewsets.ModelViewSet):
         meeting_attendee.delete()
 
         return success_response(message="Meeting attendee removed successfully.")
+        
